@@ -1,0 +1,7 @@
+{
+  "name": "nfextractor",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "mendesg0 <gabriel@prestige.com.br>",
+  "license": "MIT"
+}
