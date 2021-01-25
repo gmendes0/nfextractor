@@ -5,7 +5,9 @@
   "author": "mendesg0 <gabriel@prestige.com.br>",
   "license": "MIT",
   "scripts": {
-    "dev": "nodemon --watch src --exec ts-node src/server.ts -e ts"
+    "dev": "nodemon --watch src --exec ts-node src/server.ts -e ts",
+    "build": "tsc",
+    "start": "yarn build && node ./dist/server.js"
   },
   "dependencies": {
     "dotenv": "^8.2.0",

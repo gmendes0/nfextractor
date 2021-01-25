@@ -19,11 +19,11 @@ export default {
             );
 
             const items = Array.from(rows).map(row => {
-              const nameElement = row.cells[0].querySelector<HTMLSpanElement>(
-                ".txtTit2"
-              );
               const codeElement = row.cells[0].querySelector<HTMLSpanElement>(
                 ".RCod"
+              );
+              const nameElement = row.cells[0].querySelector<HTMLSpanElement>(
+                ".txtTit2"
               );
               const quantityElement = row.cells[0].querySelector<HTMLSpanElement>(
                 ".Rqtd"
@@ -41,8 +41,8 @@ export default {
               );
 
               return {
-                name: nameElement?.innerHTML,
                 code: codeElement?.innerText.replace(/\D/g, ""),
+                name: nameElement?.innerHTML,
                 quantity: Array.isArray(sanitizedQuantity)
                   ? sanitizedQuantity[0].replace(",", ".")
                   : 0,
@@ -73,7 +73,5 @@ export default {
       console.error(error);
       return response.json({ ok: false, error });
     }
-
-    // return response.json({ ok: true, data: items });
   },
 };
