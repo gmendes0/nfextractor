@@ -1,5 +1,16 @@
 import { NextFunction, Request, Response } from "express";
 import puppeteer from "puppeteer";
+import { GoogleSpreadsheet } from "google-spreadsheet";
+
+export interface IItem {
+  code: string;
+  name: string;
+  quantity: string;
+  unit: string;
+  unitary_value: string;
+  total_value: string;
+  category: string;
+}
 
 export default {
   async get(request: Request, response: Response, next: NextFunction) {
@@ -13,7 +24,7 @@ export default {
           const page = await browser.newPage();
           await page.goto(url);
 
-          const items = await page.evaluate(() => {
+          const nfe = await page.evaluate(() => {
             const rows = document.querySelectorAll<HTMLTableRowElement>(
               "#conteudo table tbody tr"
             );
@@ -40,28 +51,129 @@ export default {
                 /(\d|,)*$/g
               );
 
-              return {
-                code: codeElement?.innerText.replace(/\D/g, ""),
-                name: nameElement?.innerHTML,
-                quantity: Array.isArray(sanitizedQuantity)
-                  ? sanitizedQuantity[0].replace(",", ".")
-                  : 0,
-                unit: unitElement?.innerText.replace(/^UN:/g, "").trim(),
-                unitary_value: unitaryValueElement?.innerText
-                  .replace(/^Vl\. Unit\.:/g, "")
-                  .trim()
-                  .replace(",", "."),
-                total_value: totalElement.innerText
-                  .replace(/^Vl. Total/gm, "")
-                  .trim()
-                  .replace(",", "."),
+              const item: IItem = {
+                code: codeElement?.innerText.replace(/\D/g, "") ?? "",
+                name: nameElement?.innerHTML ?? "",
+                quantity: new Intl.NumberFormat("pt-BR").format(
+                  Array.isArray(sanitizedQuantity)
+                    ? Number(
+                        sanitizedQuantity[0].replace(".", "").replace(",", ".")
+                      )
+                    : 0
+                ),
+                unit: unitElement?.innerText.replace(/^UN:/g, "").trim() ?? "",
+                unitary_value: new Intl.NumberFormat("pt-BR").format(
+                  Number(
+                    unitaryValueElement?.innerText
+                      .replace(/^Vl\. Unit\.:/g, "")
+                      .trim()
+                      .replace(".", "")
+                      .replace(",", ".")
+                  ) ?? "0"
+                ),
+                total_value: new Intl.NumberFormat("pt-BR").format(
+                  Number(
+                    totalElement.innerText
+                      .replace(/^Vl. Total/gm, "")
+                      .trim()
+                      .replace(".", "")
+                      .replace(",", ".")
+                  ) ?? "0"
+                ),
+                category: "others",
               };
+
+              return item;
             });
 
-            return items;
+            const info_area = document?.querySelector<HTMLDivElement>("#infos");
+            const key_area = document?.querySelector<HTMLSpanElement>(".key");
+
+            if (!info_area)
+              return { date: "", items: items, key: key_area?.innerText ?? "" };
+
+            const date = info_area.innerText.match(
+              /((?:[\d]{2}\/){2}[\d]{4}\ (?:[\d]{2}:){2}[\d]{2})(?=\ -\ Via\ Consumidor)/gi
+            );
+
+            if (date)
+              return {
+                date: date[0],
+                items: items,
+                key: key_area?.innerText ?? "",
+              };
+
+            return { date: "", items: items, key: key_area?.innerText ?? "" };
           });
 
-          response.json({ ok: true, data: items });
+          if (!process.env.GOOGLE_DOCUMENT_ID)
+            throw new Error("Undefined Document ID");
+
+          const doc = new GoogleSpreadsheet(process.env.GOOGLE_DOCUMENT_ID);
+
+          if (
+            !process.env.GOOGLE_CLIENT_EMAIL ||
+            !process.env.GOOGLE_PRIVATE_KEY
+          )
+            throw new Error("Undefined Credentials");
+
+          await doc.useServiceAccountAuth({
+            client_email: process.env.GOOGLE_CLIENT_EMAIL,
+            private_key: process.env.GOOGLE_PRIVATE_KEY,
+          });
+
+          await doc.loadInfo();
+
+          const timestamp = nfe.date
+            ? Date.parse(nfe.date.trim())
+            : new Date().getTime();
+
+          const date = new Date(timestamp);
+
+          const title = `${date
+            .toLocaleString("en", {
+              month: "long",
+            })
+            .toLocaleLowerCase()} ${date.getFullYear()}`;
+
+          const sheets = await doc.sheetsByTitle;
+
+          const sheet = sheets[title]
+            ? sheets[title]
+            : await doc.addSheet({
+                title,
+              });
+
+          if (!sheets[title])
+            await sheet.setHeaderRow([
+              "Item",
+              "Qtd.",
+              "Valor unt.",
+              "Categoria",
+              "Total",
+            ]);
+
+          console.log(sheet);
+
+          const infos = nfe.items.map(item => ({
+            Item: item.name,
+            "Qtd.": item.quantity,
+            "Valor unt.": item.unitary_value,
+            Categoria: "",
+            Total: item.total_value,
+          }));
+
+          infos.push({
+            Item: `^^^ ${nfe.date} ^^^`,
+            "Qtd.": "0",
+            "Valor unt.": "0",
+            Categoria: "",
+            Total: "0",
+          });
+
+          await sheet.addRows(infos);
+
+          response.json({ ok: true, data: nfe.items });
         } catch (error) {
           console.error(error);
           throw new Error("whoops! something went wrong.");
