@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import puppeteer from "puppeteer";
 import { GoogleSpreadsheet } from "google-spreadsheet";
+import moment from "moment";
 
 export interface IItem {
   code: string;
@@ -124,17 +125,11 @@ export default {
 
           await doc.loadInfo();
 
-          const timestamp = nfe.date
-            ? Date.parse(nfe.date.trim())
-            : new Date().getTime();
+          const date = nfe.date
+            ? moment(nfe.date.trim(), "DD/MM/YYYY hh:mm:ss")
+            : moment();
 
-          const date = new Date(timestamp);
-
-          const title = `${date
-            .toLocaleString("en", {
-              month: "long",
-            })
-            .toLocaleLowerCase()} ${date.getFullYear()}`;
+          const title = `${date.format("MMM")} ${date.format("YYYY")}`;
 
           const sheets = await doc.sheetsByTitle;
 
@@ -152,8 +147,6 @@ export default {
               "Categoria",
               "Total",
             ]);
-
-          console.log(sheet);
 
           const infos = nfe.items.map(item => ({
             Item: item.name,
